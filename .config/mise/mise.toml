@@ -1,0 +1,31 @@
+[env]
+HADRON_ZFS_VERSION = "0.1.0"
+
+HADRON_VERSION = "v0.1.1"
+BSD_COMPAT_HEADERS_VERSION = "0.7.2-r6"
+LIBTIRPC_VERSION = "1.3.7"
+OPENZFS_VERSION = "2.4.1"
+
+HADRON_IMAGE_BASE = "ghcr.io/kairos-io/hadron"
+HADRON_IMAGE_TRUSTED = "ghcr.io/kairos-io/hadron-trusted"
+HADRON_IMAGE_TOOLCHAIN = "ghcr.io/kairos-io/hadron-toolchain"
+
+TARGET_PLATFORMS = "linux/amd64,linux/arm64"
+
+_.file = [
+  "env/kernel",
+  "env/bsd-compat-headers",
+  "env/libtirpc",
+  "env/openzfs",
+  "env/dockerignore",
+  "env/ci-shim",
+]
+
+_.source = [
+  "kernel.sh",
+  "bsd-compat-headers.sh",
+  "libtirpc.sh",
+  "openzfs.sh",
+  "dockerignore.sh",
+  "ci-shim.sh",
+]
