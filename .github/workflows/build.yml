@@ -1,75 +1,383 @@
 name: build
 on: [push]
+env:
+  REF_NAME: ${{ github.ref_name }}
 jobs:
   build:
     name: build (${{ matrix.target }})
     strategy:
       matrix:
         include:
-          - runner: ""
+          - runner: ubuntu-24.04
+            tag: "v0.1.1"
             target: linux/amd64
-          - runner: -arm
+            arch_target: amd64
+            arch_linux: x86
+            arch_node: x64
+            arch_system: x86_64
+            gcompat: "0.1.0"
+            node: "v25.9.0"
+            node_server: nodejs.org
+            sccache: "v0.14.0"
+            hadron: "v0.1.1"
+            bsd_compat_headers: "0.7.2-r6"
+            libtirpc: "1.3.7"
+            openzfs: "2.4.1"
+            tar: "1.35-r4"
+            bzip2: "1.0.8-r6"
+          - runner: ubuntu-24.04-arm
+            tag: "v0.1.1"
             target: linux/arm64
-    runs-on: ubuntu-latest${{ matrix.runner }}
-    permissions:
-      contents: read
-      packages: write
+            arch_target: arm64
+            arch_linux: arm64
+            arch_node: arm64
+            arch_system: aarch64
+            gcompat: "0.1.0"
+            node: "v25.9.0"
+            node_server: nodejs.org
+            sccache: "v0.14.0"
+            hadron: "v0.1.1"
+            bsd_compat_headers: "0.7.2-r6"
+            libtirpc: "1.3.7"
+            openzfs: "2.4.1"
+            tar: "1.35-r4"
+            bzip2: "1.0.8-r6"
+          - runner: ubuntu-24.04-riscv
+            tag: v0.1.1-riscv64
+            target: linux/riscv64
+            arch_target: riscv64
+            arch_linux: riscv64
+            arch_node: riscv64
+            arch_system: riscv64
+            gcompat: "0.1.0"
+            node: "v25.9.0"
+            node_server: unofficial-builds.nodejs.org
+            sccache: "v0.14.0"
+            hadron: "v0.1.1"
+            bsd_compat_headers: "0.7.2-r6"
+            libtirpc: "1.3.7"
+            openzfs: "2.4.1"
+            tar: "1.35-r4"
+            bzip2: "1.0.8-r6"
+    runs-on: ${{ matrix.runner }}
+    container: ghcr.io/kairos-io/hadron-toolchain:${{ matrix.tag }}
     steps:
+      - name: Initialize environment
+        run: |
+          cat <<EOF >>$GITHUB_ENV
+          REF_NAME=${REF_NAME//\//-}
+          EOF
+
+      - name: Pretend to be alpine
+        if: matrix.arch_target == 'amd64'
+        run: |
+          cat <<EOF >/etc/os-release
+          NAME="Hadron Linux"
+          PRETTY_NAME="Hadron Linux"
+          ID=alpine
+          BUILD_ID=rolling
+          VERSION_ID="v0.1.1"
+          EOF
+
+      - name: Download gcompat
+        if: matrix.arch_target != 'amd64'
+        run: >-
+          curl -L
+          -O https://github.com/cjntaylor/gcompat/releases/download/${{ matrix.gcompat }}/gcompat-${{ matrix.gcompat }}-${{ matrix.arch_target }}.tar.xz
+
+      - name: Extract gcompat
+        if: matrix.arch_target != 'amd64'
+        run: tar -C / -xf gcompat-${{ matrix.gcompat }}-${{ matrix.arch_target }}.tar.xz
+
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Install httpie
-        run: pip install httpie
+      - name: Download node
+        if: ${{ env.ACT }}
+        run: >-
+          curl -L
+          -o vendor/node-${{ matrix.node }}-linux-${{ matrix.arch_node }}.tar.xz
+          https://${{ matrix.node_server }}/download/release/${{ matrix.node }}/node-${{ matrix.node }}-linux-${{ matrix.arch_node }}.tar.xz
 
-      - name: Restore vendored files
+      - name: Install node
+        if: ${{ env.ACT }}
+        run: >-
+          tar -C /usr
+          --strip-components=1
+          -xf vendor/node-${{ matrix.node }}-linux-${{ matrix.arch_node }}.tar.xz
+
+      - name: Download tar
+        run: >-
+          curl -L -o vendor/tar-${{ matrix.tar }}.apk
+          https://dl-cdn.alpinelinux.org/alpine/latest-stable/main/${{ matrix.arch_system }}/tar-${{ matrix.tar }}.apk
+
+      - name: Extract tar
+        run: tar -C / -xf vendor/tar-${{ matrix.tar }}.apk
+
+      - name: Download bzip2
+        run: >-
+          curl -L -o vendor/bzip2-${{ matrix.bzip2 }}.apk
+          https://dl-cdn.alpinelinux.org/alpine/latest-stable/main/${{ matrix.arch_system }}/bzip2-${{ matrix.bzip2 }}.apk
+
+      - name: Extract bzip2
+        run: tar -C / -xf vendor/bzip2-${{ matrix.bzip2 }}.apk
+
+      - name: Restore vendor files
         uses: actions/cache/restore@v5
+        id: cache_vendor
         with:
           key: vendor # Vendored files are os and architecture independent
           path: vendor
 
-      - name: Setup environment
-        uses: jdx/mise-action@v4
+      - name: Download kernel
+        if: steps.cache_vendor.outputs.cache-hit != 'true'
+        run: >-
+          curl -L
+          -o "vendor/linux-$(cat /usr/share/kernel-misc/kernel-version).tar.xz"
+          https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-$(cat /usr/share/kernel-misc/kernel-version).tar.xz
 
-      - name: Cache vendored files
+      - name: Download bsd-compat-headers
+        if: steps.cache_vendor.outputs.cache-hit != 'true'
+        run: >-
+          curl -L
+          -o vendor/bsd-compat-headers-${{ matrix.bsd_compat_headers }}.apk
+          https://dl-cdn.alpinelinux.org/latest-stable/main/${{ matrix.arch_system }}/bsd-compat-headers-${{ matrix.bsd_compat_headers }}.apk
+
+      - name: Download libtirpc
+        if: steps.cache_vendor.outputs.cache-hit != 'true'
+        run: >-
+          curl -L
+          -o vendor/libtirpc-${{ matrix.libtirpc }}.tar.bz2
+          https://downloads.sourceforge.net/libtirpc/libtirpc-${{ matrix.libtirpc }}.tar.bz2
+
+      - name: Download openzfs
+        if: steps.cache_vendor.outputs.cache-hit != 'true'
+        run: >-
+          curl -L
+          -o vendor/zfs-${{ matrix.openzfs }}.tar.gz
+          https://github.com/openzfs/zfs/releases/download/zfs-${{ matrix.openzfs }}/zfs-${{ matrix.openzfs }}.tar.gz
+
+      - name: Cache vendor files
         uses: actions/cache/save@v5
+        if: steps.cache_vendor.outputs.cache-hit != 'true'
         with:
           key: vendor # Vendored files are os and architecture independent
           path: vendor
 
-      - name: Log in to Github Container Registry
-        uses: docker/login-action@v3
+      - name: Enable sccache
+        uses: cjntaylor/sccache-action@v0.0.11
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup docker buildx
-        uses: docker/setup-buildx-action@v4
+      - name: Configure sccache
+        run: |
+          cat <<EOF >>$GITHUB_ENV
+          CC="sccache gcc"
+          CXX="sccache gcc"
+          EOF
+
+      - name: Extract bsd-compat-headers
+        run: tar -C / -xf vendor/bsd-compat-headers-${{ matrix.bsd_compat_headers }}.apk
+
+      - name: Restore linux sources
+        uses: actions/cache/restore@v5
+        id: cache_linux
         with:
-          platforms: ${{ matrix.target }}
+          key: build-linux-${{ matrix.hadron }}-${{ runner.arch }}
+          path: build/linux
 
-      - name: Build and push
-        uses: docker/bake-action@v7
+      - name: Extract kernel sources
+        if: steps.cache_linux.outputs.cache-hit != 'true'
+        run: >-
+          tar -C build/linux --strip-components=1 -xf
+          vendor/linux-$(cat /usr/share/kernel-misc/kernel-version).tar.xz
+
+      - name: Copy kernel config
+        if: steps.cache_linux.outputs.cache-hit != 'true'
+        run: cp /usr/share/kernel-misc/kernel-config .config
+        working-directory: build/linux
+
+      - name: Enable module signatures
+        if: steps.cache_linux.outputs.cache-hit != 'true'
+        run: ./scripts/config --enable MODULE_SIG_ALL
+        working-directory: build/linux
+
+      - name: Generate linux config
+        if: steps.cache_linux.outputs.cache-hit != 'true'
+        run: make olddefconfig
         env:
-          TARGET_PLATFORMS: ${{ matrix.target }}
+          ARCH: ${{ matrix.arch_linux }}
+        working-directory: build/linux
+
+      - name: Prepare out-of-tree module build
+        if: steps.cache_linux.outputs.cache-hit != 'true'
+        run: make -j$(nproc) modules_prepare
+        env:
+          ARCH: ${{ matrix.arch_linux }}
+        working-directory: build/linux
+
+      - name: Setup module symbol versions
+        if: steps.cache_linux.outputs.cache-hit != 'true'
+        run: cp /usr/share/kernel-misc/Module.symvers .
+        working-directory: build/linux
+
+      - name: Cache linux sources
+        uses: actions/cache/save@v5
+        if: steps.cache_linux.outputs.cache-hit != 'true'
         with:
-          source: .
-          set: |
-            *.output=type=registry,push-by-digest=true
+          key: build-linux-${{ matrix.hadron }}-${{ runner.arch }}
+          path: build/linux
 
-      - name: Save image digests
-        run: docker image ls
+      - name: Restore libtirpc
+        uses: actions/cache/restore@v5
+        id: cache_libtirpc
+        with:
+          key: build-libtirpc-${{ matrix.libtirpc }}-${{ runner.arch }}
+          path: build/libtirpc
 
-  # manifest:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - name: Log in to Github Container Registry
-  #       uses: docker/login-action@v3
-  #       with:
-  #         registry: ghcr.io
-  #         username: ${{ github.actor }}
-  #         password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Extract libtirpc
+        if: steps.cache_libtirpc.outputs.cache-hit != 'true'
+        run: >-
+          tar -C build/libtirpc --strip-components=1 -xf
+          vendor/libtirpc-${{ matrix.libtirpc }}.tar.bz2
 
-  #     - name: Setup docker buildx
-  #       uses: docker/setup-buildx-action@v4
+      - name: Configure libtirpc
+        if: steps.cache_libtirpc.outputs.cache-hit != 'true'
+        run: >-
+          ./configure
+          --prefix=/usr
+          --enable-shared=no
+          --enable-static=yes
+          --enable-pic=yes
+          --disable-gssapi ||
+          cat config.log
+        working-directory: build/libtirpc
 
+      - name: Build libtirpc
+        if: steps.cache_libtirpc.outputs.cache-hit != 'true'
+        run: make -j$(nproc)
+        working-directory: build/libtirpc
+
+      - name: Cache libtirpc
+        uses: actions/cache/save@v5
+        if: steps.cache_libtirpc.outputs.cache-hit != 'true'
+        with:
+          key: build-libtirpc-${{ matrix.libtirpc }}-${{ runner.arch }}
+          path: build/libtirpc
+
+      - name: Install libtirpc
+        run: make install
+        working-directory: build/libtirpc
+
+      - name: Restore openzfs
+        uses: actions/cache/restore@v5
+        id: cache_openzfs
+        with:
+          key: build-openzfs-${{ matrix.openzfs }}-${{ runner.arch }}
+          path: build/zfs
+
+      - name: Extract openzfs
+        if: steps.cache_openzfs.outputs.cache-hit != 'true'
+        run: tar -C build/zfs --strip-components=1 -xf vendor/zfs-${{ matrix.openzfs }}.tar.gz
+
+      - name: Configure openzfs
+        if: steps.cache_openzfs.outputs.cache-hit != 'true'
+        run: >-
+          ./configure
+          --prefix=/usr
+          --enable-shared=no
+          --enable-static=yes
+          --enable-pic=yes
+          --enable-debug=no
+          --enable-pyzfs=no
+          --enable-sysvinit=no
+          --enable-pam=no
+          --with-mounthelperdir=/usr/bin
+          --with-udevdir=/usr/lib/udev
+          --with-linux=$(readlink -f ..)/linux
+          --with-linux-obj=$(readlink -f ..)/linux
+          --with-gnu-ld=no
+        env:
+          ARCH: ${{ matrix.arch_linux }}
+        working-directory: build/zfs
+
+      - name: Build openzfs
+        if: steps.cache_openzfs.outputs.cache-hit != 'true'
+        run: make -j$(nproc)
+        env:
+          ARCH: ${{ matrix.arch_linux }}
+        working-directory: build/zfs
+
+      - name: Cache openzfs
+        uses: actions/cache/save@v5
+        if: steps.cache_openzfs.outputs.cache-hit != 'true'
+        with:
+          key: build-openzfs-${{ matrix.openzfs }}-${{ runner.arch }}
+          path: build/zfs
+
+      - name: Install openzfs
+        run: DESTDIR="$(readlink -f ../..)/output" make install
+        env:
+          ARCH: ${{ matrix.arch_linux }}
+        working-directory: build/zfs
+
+      - name: Relocate sbin binaries
+        run: >-
+          find output/usr/sbin
+          -mindepth 1
+          -maxdepth 1
+          -exec mv {} output/usr/bin \;
+
+      - name: Relocate kernel modules
+        run: >-
+          find output/lib
+          -mindepth 1
+          -maxdepth 1
+          -exec mv {} output/usr/lib \;
+
+      - name: Remove unnecessary files
+        run: >-
+          rm -rf
+          output/etc
+          output/lib
+          output/usr/etc/zfs/*.example
+          output/usr/include
+          output/usr/lib/*.{a,la}
+          output/usr/lib/{dracut,pkgconfig}
+          output/usr/sbin
+          output/usr/share/{initramfs-tools,man}
+          output/usr/share/zfs/{test-runner,zfs-tests,zfs-tests.sh}
+          output/usr/src
+
+      - name: Create overlay archive
+        run: >-
+          tar
+          -C output
+          -cJf ${{ github.event.repository.name }}-${{ env.REF_NAME }}-${{ matrix.arch_target }}.tar.xz
+          $(find output -mindepth 1 -maxdepth 1 -printf " %P")
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ github.event.repository.name }}-${{ env.REF_NAME }}-${{ matrix.arch_target }}
+          path: ${{ github.event.repository.name }}-${{ env.REF_NAME }}-${{ matrix.arch_target }}.tar.xz
+  publish:
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    needs: [build]
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        if: ${{ !env.ACT }}
+        with:
+          name: ${{ github.event.repository.name }}-${{ env.REF_NAME }}-*
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v3
+        if: ${{ !env.ACT }}
+        with:
+          body_path: CHANGELOG.md
+          files: |
+            ${{ github.event.repository.name }}-${{ env.REF_NAME }}-*.tar.xz
