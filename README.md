@@ -1,46 +1,20 @@
 # Hadron ZFS
 
-[Hadron](https://github.com/kairos-io/hadron) extension image that includes [OpenZFS](https://github.com/openzfs/zfs) kernel modules and userspace applications.
+[Hadron](https://github.com/kairos-io/hadron) overlay that includes [OpenZFS](https://github.com/openzfs/zfs) kernel modules and userspace applications.
 
 ## Building
 
-This project uses [mise](https://mise.jdx.dev) to manage environment variables and to download the required vendor archives before build. If you have mise installed, all that should be required is adding this repository to your [trusted paths](https://mise.jdx.dev/cli/trust.html).
-
-Once the environment is setup correctly, building uses [docker bake](https://docs.docker.com/build/bake/):
+This project uses [GitHub Actions](https://docs.github.com/en/actions) to build and publish overlay archives. This can be tested locally via [act](https://nektosact.com/):
 
 ```sh
-docker buildx bake
+act -s GITHUB_TOKEN="$(gh auth token)"
 ```
 
-When using a docker-container [builder](https://docs.docker.com/build/builders/) (the default on many systems, or when using podman), the built images will remain inside the container. Since this project uses multi-architecture builds, the typical `--load` flag will not work (the underlying command `--set=*.output.type=docker` doesn't support loading manifests). There are two options:
-
-### Use the oci output type
-
-```sh
-docker buildx bake --set="*.output=type=oci"
-```
-
-```sh
-docker buildx bake --set="*.output=type=oci,dest=."
-```
-
-You may need to include the `dest=` parameter for this to work correctly; if your underlying container runtime is `podman`, the oci-formatted tar this generates will load correctly. Moby/Docker doesn't support OCI tars; specifying `dest=` will write the output tar to the specified directory instead of trying to load the archive
-
-### Publish to a registry
-
-```sh
-docker buildx bake --push
-```
-
-This will push the resulting images and manifest to the configured container registry. By default, this is set either from the `GITHUB_SERVER_URL` and `GITHUB_REPOSITORY` environment variables, or directly by `CI_REGISTRY_IMAGE`. These values are set appropriately when running locally or on a CI by the [`ci-shim.sh`](.config/mise/ci-shim.sh) loaded by `mise`. You may need to manually set `CI_REGISTRY_IMAGE` to an appropriate value to target a specific registry. Forks of this repository will work correctly out-of-the-box; [`ci-shim.sh`](.config/mise/ci-shim.sh) sets `GITHUB_REPOSITORY` appropriately by parsing the output of `git remote show-url origin`
+The GITHUB_TOKEN must be set to a valid token to support the [Sccache Action](https://github.com/marketplace/actions/sccache-action) - the job will fail without it. This functionality was retained even locally because of how much time it saves; all other non-local steps are disabled when running via act.
 
 ## Releases
 
-This project builds and publishes containers to GHCR. You can pull or reference the project from here:
-
-```sh
-docker pull ghcr.io/cjntaylor/hadron-zfs:latest
-```
+This project builds and publishes overlay archives via the action workflow to [releases](https://github.com/cjntaylor/hadron-zfs/releases). Each release will contain one overlay archive per supported architecture. Currently, the project is built for `amd64`, `arm64` and `riscv64`
 
 ## Changelog
 

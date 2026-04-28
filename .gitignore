@@ -8,6 +8,8 @@
 !LICENSE.md
 !README.md
 
+!/.artifacts
+
 !/.config
 !/.config/mise
 !/.config/mise/env
@@ -24,7 +26,13 @@
 !/.github/workflows
 !/.github/workflows/build.yml
 
+!/build
+!/build/libtirpc
+!/build/linux
+!/build/tar
+!/build/zfs
+!/output
 !/vendor
 
-!/docker-bake.hcl
-!/Dockerfile
+!/.actrc
+!/event.json
