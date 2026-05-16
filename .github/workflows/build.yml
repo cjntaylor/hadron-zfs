@@ -394,7 +394,7 @@ jobs:
           tar
           -C output
           -cJf ${{ github.event.repository.name }}-${{ env.REF_NAME }}-${{ matrix.arch_target }}.tar.xz
-          $(find output -mindepth 1 -maxdepth 1 -printf " %P")
+          $(find output -mindepth 1 -maxdepth 1 -not -name ".gitignore" -printf " %P")
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
