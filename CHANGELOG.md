@@ -17,6 +17,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-16
+
+### Fixed
+
+- Populate the kernel version URL from the kernel version file
+- Cache vendored files separately by version
+- Use `${SCCACHE_PATH}` to invoke sccache when compiling
+- Use correct architecture when building riscv64
+- Publish tags during build
+
+### Changed
+
+- Updated Hadron to [v0.2.0](https://github.com/kairos-io/hadron/releases/tag/v0.2.0)
+  - riscv64 is now published in the multi-architecture manifest
+
+- Updated OpenZFS to [2.4.2](https://github.com/openzfs/zfs/releases/tag/zfs-2.4.2)
+
 ## [0.2.0] - 2026-04-28
 
 ### Changed
